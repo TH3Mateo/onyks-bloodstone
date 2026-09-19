@@ -107,15 +107,36 @@ async def getCategoryViewMap(db_connection):
     tables = result_tables.fetchall()
     return {table_row[1]: safeViewName(table_row[0], table_row[1]) for table_row in tables}
 
+def supplierColumnNames(suppliers):
+    """Maps (id, name) pairs to the name of each supplier's code column in the CAD views,
+    as {id: column}. The column is what users read in Altium's and KiCad's browsers, so
+    it carries the supplier's name only ("supplier_lcsc"), not its internal id.
+
+    Names are reduced to a plain lowercase identifier (Polish letters transliterated,
+    anything else becomes "_"), which also keeps names like "Farnell (UK)" from breaking
+    the generated SQL. Two suppliers that reduce to the same identifier are told apart
+    by appending the id to the later one. The "supplier_" prefix stays: clients such as
+    Chalcedon use it to recognise supplier columns. Clients should take the name from the
+    API's `columnName` instead of recomputing it."""
+    import unicodedata
+    columns, used = {}, set()
+    for supplier_id, name in sorted(suppliers):
+        ascii_name = unicodedata.normalize("NFKD", name.replace("ł", "l").replace("Ł", "L"))
+        ascii_name = ascii_name.encode("ascii", "ignore").decode()
+        slug = re.sub(r"[^a-z0-9]+", "_", ascii_name.lower()).strip("_")
+        column = f"supplier_{slug}" if slug else f"supplier_{supplier_id}"
+        if column in used:
+            column = f"{column}_{supplier_id}"
+        used.add(column)
+        columns[supplier_id] = column
+    return columns
+
 async def getSupplierColumnMap(db_connection):
     """Returns {supplier_name: column_name} for every supplier's per-table code column."""
     result_suppliers = await db_connection.execute(text("SELECT id, name FROM private.suppliers"))
     suppliers = result_suppliers.fetchall()
-    columns = {}
-    for supplier_id, supplier_name in suppliers:
-        safe_supplier_name = supplier_name.lower().replace(' ', '_').replace('-', '_')
-        columns[supplier_name] = f"supplier_{supplier_id}_{safe_supplier_name}"
-    return columns
+    by_id = supplierColumnNames(suppliers)
+    return {supplier_name: by_id[supplier_id] for supplier_id, supplier_name in suppliers}
 
 ALTIUM_SCHEMA = "altium"
 KICAD_SCHEMA = "kicad"

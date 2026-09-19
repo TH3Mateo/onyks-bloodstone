@@ -347,3 +347,49 @@ Dashboard czyści `setInterval` przy opuszczeniu strony (wcześniej wyciekał).
 
 Zweryfikowane: 5 SchLib / 1 PcbLib zgodne z `svn list`, `since` poprawne. Wygląd — niezweryfikowany
 wizualnie (brak przeglądarki).
+
+---
+
+## 2026-09-19 (cd. 5) — migracja starej bazy (`/home/server/database/contents`)
+
+Źródła: `backup_data.sql` (pg_dump z Postgres 15, 10 tabel kategorii, 78 elementów), `datasheets.tar`
+(42 PDF), `svn_repo/` (kopia robocza `svn://100.91.20.94/data` r72, czysta, bez historii).
+Skrypt: `.claude/migration/migrate_legacy.py` (słowniki przez API, elementy SQL-em w jednej transakcji).
+
+**Decyzje użytkownika:**
+1. `manufacturer_part_name` było błędnym polem — to kody LCSC → dostawca `LCSC` (id=2), `suppliers={"2": "C…"}` (68 el.).
+2. Producenci scaleni (36 pisowni → 33): obcięte spacje, `STMicroeletronics`→`STMicroelectronics`,
+   `texas Instruments`→`Texas Instruments`. Nowe: przycinanie nazw w `AddItemDialog`/`EditItemDialog`
+   **oraz** w backendzie (`DictionaryName` w `schemas.py` — chroni też klienta w Chalcedonie).
+3. **Ścieżki bibliotek względem korzenia repo** (`symbols/ics/X.SchLib`) — stara konwencja jest poprawna,
+   Altium szuka od folderu repo, DbLib ma leżeć w korzeniu repo. `RepositoryModelSelector` przestał
+   doklejać nazwę repo (`part_library/`) do zapisywanej ścieżki.
+4. Dane testowe usunięte przez API (2 el., 2 kat., 2 prod., 1 dost., ich PDF-y).
+5. SVN: jeden commit `r4 | migracja` przez Apache (plik rewizji należy do www-data), konto tymczasowe usunięte.
+6. Pominięte: `__Previews/`, stary `onyks_database.DbLib`, zbędne kopie `footprints/mechanicals/testpoint_round_1mm.SchLib`
+   i `symbols/resistors/CAPACITOR.SCHLIB`. `desktop.ini` — pozostawiony istniejący. Szablony `.SchDot` zostają.
+   `svn:global-ignores` na korzeniu: `__Previews`, `History`, `Project Logs for *` (przetestowane, także w podfolderach).
+   **Zostawione wbrew pierwotnej liście „śmieci"**: `footprints/ics/xddddd.PcbLib` (LCC-20) i `HX4051-S.PcbLib` (SOP-16)
+   — zawierają jedyne egzemplarze tych footprintów.
+7. Wszystkie 10 kategorii założone (Antennas/Batteries/Modules puste).
+
+Datasheety: 38 przypisanych → `/uploads/<uuid>.pdf`; 4 nieprzypisane → `/uploads/_unassigned/`.
+`created_at` bez strefy potraktowane jako Europe/Warsaw.
+
+**Weryfikacja:** 78 el. w proporcjach zrzutu; 156/156 par ref+ścieżka rozwiązuje się do symbolu/footprintu
+w nowym repo; 38/38 PDF → HTTP 200; `altium_lib` = dokładnie 10 widoków kategorii; DbLib 10 tabel + `[LCSC]`;
+dashboard: 54 symbole / 52 footprinty w 41+41 plikach, rev 4.
+
+---
+
+## 2026-09-19 (cd. 6) — czytelne kolumny dostawców + ignorowanie DbLib
+
+- Kolumna kodu dostawcy: `supplier_2_lcsc` → **`supplier_lcsc`** (`supplierColumnNames()` w `utils.py`):
+  slug z nazwy (transliteracja, `[^a-z0-9]`→`_`), id doklejane tylko przy kolizji. Naprawia też błąd:
+  nazwa z kropką/nawiasem (np. `Farnell (UK)`) psuła wcześniej SQL widoków. API zwraca `columnName`
+  w `/supplier/list` i `/supplier/{id}`.
+- Chalcedon `src/utils/dblib.js` (kopia na serwerze, niecommitowane): `supplierColumnName` bierze `columnName`
+  z API, `SUPPLIER_COLUMN = /^supplier_/` — stare mapy `supplier_2_lcsc` w istniejącym pliku są usuwane
+  (test node: 20 → 0, 10 nowych).
+- SVN r5: `svn:global-ignores` += `*.[Dd][Bb][Ll][Ii][Bb]`. Test `svn add --force .` (jak Push w Chalcedonie):
+  4 warianty DbLib pominięte, plik kontrolny dodany.

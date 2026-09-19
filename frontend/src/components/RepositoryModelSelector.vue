@@ -29,6 +29,17 @@
     onMounted(() => window.addEventListener('keydown', handleKeydown))
     onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
+    // Library paths are stored relative to the repository root (symbols/ics/X.SchLib):
+    // Altium resolves them against the folder holding the DbLib, which is the root of
+    // the checked-out repository. The explorer's path starts with the repository's own
+    // name, so that first segment must not end up in the stored path.
+    const select = () =>
+    {
+        const selected = repositoryExplorer.value.getSelected()
+        emit('model-select', { ...selected, path: selected.path.slice(1) })
+        dialog.value.open = false
+    }
+
     defineExpose({
         open
     });
@@ -40,7 +51,7 @@
         <onyks-container type="stack" padding="" gap="l">
             <RepositoryExplorer :filter="props.filter" ref="repositoryExplorer"></RepositoryExplorer>
         </onyks-container>
-        <onyks-button background="green" slot="footer" @click="emit('model-select', repositoryExplorer.getSelected()); dialog.open = false">OK</onyks-button>
+        <onyks-button background="green" slot="footer" @click="select">OK</onyks-button>
         <onyks-button background="red" slot="footer" @click="dialog.open = false">Close</onyks-button>
     </onyks-dialog>
 </template>

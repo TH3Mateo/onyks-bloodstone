@@ -5,7 +5,13 @@ from fastapi import Query
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, BeforeValidator
+from pydantic import BaseModel, Field, BeforeValidator, StringConstraints
+
+# Names of manufacturers, suppliers and categories: surrounding whitespace is dropped
+# before validation, so "onsemi " and "onsemi" can no longer become two entries and a
+# name made of spaces only is rejected as empty. Applies to every client of the API
+# (web GUI and the Chalcedon desktop app alike).
+DictionaryName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)]
 
 def emptyToNone(v: str | None) -> str | None:
     if isinstance(v, str) and not v.strip():
@@ -44,7 +50,7 @@ class ElementList(BaseModel):
     items: List[ElementFull]
 
 class ManufacturerBase(BaseModel):
-    name: str = Field(min_length=1, max_length=256)
+    name: DictionaryName
 
 class ManufacturerFull(ManufacturerBase):
     id: int
@@ -55,18 +61,20 @@ class ManufacturerList(BaseModel):
     items: List[ManufacturerFull]
 
 class SupplierBase(BaseModel):
-    name: str = Field(min_length=1, max_length=256)
+    name: DictionaryName
 
 class SupplierFull(SupplierBase):
     id: int
     createdAt: datetime
+    # Name of this supplier's code column in the Altium/KiCad views (e.g. "supplier_lcsc").
+    columnName: str | None = None
 
 class SupplierList(BaseModel):
     total: int
     items: List[SupplierFull]
 
 class TableBase(BaseModel):
-    name: str = Field(min_length=1, max_length=256)
+    name: DictionaryName
 
 class TableFull(TableBase):
     id: int

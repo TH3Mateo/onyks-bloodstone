@@ -577,8 +577,16 @@ async def supplierList(limit: int = Query(default=10, ge=1, le=100), skip: int =
     queryEntries = select(models.Supplier).offset(skip).limit(limit)
     entriesResult = await db.execute(queryEntries)
     entries = entriesResult.scalars().all()
-    
-    return {"total": totalCount, "items": entries}
+
+    # Collisions are resolved across ALL suppliers, so names come from the full list.
+    columns = await supplierColumnsById(db)
+    items = [{"id": e.id, "name": e.name, "createdAt": e.createdAt, "columnName": columns.get(e.id)} for e in entries]
+
+    return {"total": totalCount, "items": items}
+
+async def supplierColumnsById(db):
+    rows = (await db.execute(select(models.Supplier.id, models.Supplier.name))).all()
+    return utils.supplierColumnNames([(row[0], row[1]) for row in rows])
 
 @app.delete('/supplier/delete/{id}')
 async def supplierDelete(id: int, db = Depends(get_db)):
@@ -625,8 +633,9 @@ async def supplierID(id: int, db = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="ID doesn't exist!"
         )
-    
-    return item
+
+    columns = await supplierColumnsById(db)
+    return {"id": item.id, "name": item.name, "createdAt": item.createdAt, "columnName": columns.get(item.id)}
 
 @app.put('/supplier/edit/{id}')
 async def supplierEdit(id: int, supplier: schemas.SupplierBase, db = Depends(get_db)):
