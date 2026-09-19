@@ -22,7 +22,7 @@
 
     const action = async () =>
     {
-        let data = await props.action({name: name.value})
+        let data = await props.action({name: name.value.trim()})
        
         if(data.status == 200)
         {

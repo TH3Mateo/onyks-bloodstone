@@ -50,11 +50,16 @@ sync_authz_file() {
            # Clean up the tmp file to only have login and rank
            psql "host=database dbname=$POSTGRES_DB user=$POSTGRES_USER" -Atc \
            "SELECT login, rank FROM private.users;" | while IFS='|' read login rank; do
+                # Every account gets read-write on SVN: adding a component means
+                # committing its .SchLib/.PcbLib files, so write access is the baseline
+                # for using the system at all. Rank does NOT restrict SVN -- it only
+                # limits what the web application allows (e.g. creating categories).
+                #
+                # Must match the public.user_rank enum: viewer / editor / admin. The
+                # previous branches were 'server' and 'user', which are not enum values,
+                # so viewers matched nothing, got no authz line and were denied entirely.
                 case $rank in
-                    server) echo "$login = rw" ;;
-                    admin) echo "$login = rw" ;;
-                    editor) echo "$login = rw" ;;
-                    user) echo "$login = r" ;;
+                    viewer|editor|admin) echo "$login = rw" ;;
                 esac
            done > /tmp/svn-perms.tmp
 

@@ -4,6 +4,7 @@ import RepositoryView from '@/views/RepositoryView.vue';
 import { createRouter, createWebHistory } from 'vue-router'
 import ErrorView from '@/views/ErrorView.vue';
 import ElementView from '@/views/ElementView.vue';
+import SettingsView from '@/views/SettingsView.vue';
 
 const routes = [
   {
@@ -25,6 +26,11 @@ const routes = [
     path: '/repository',
     component: RepositoryView,
     meta: { title: 'Repository - ONYKS Bloodstone' }
+  },
+  {
+    path: '/settings',
+    component: SettingsView,
+    meta: { title: 'Settings - ONYKS Bloodstone' }
   },
   {
     path: '/element/add',

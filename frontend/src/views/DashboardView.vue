@@ -1,54 +1,73 @@
 <script setup lang="js">
+    // Layout restored from the Flask-era dashboard (commit d858152): one large card with
+    // the element totals, two small cards with repository symbol/footprint counts, and a
+    // tile per component category underneath.
     import WarningAlert from '@/components/WarningAlert.vue';
-    import { onMounted, ref } from 'vue';
-    import { element, repository, table, manufacturer, supplier } from '@/utils/api';
-    import { dateUTCtoDestination } from '@/utils/tools';
+    import { onMounted, onUnmounted, ref } from 'vue';
+    import { element, repository, table } from '@/utils/api';
 
-    const lastAddedElement = ref({
-        partName: 'Undefined',
-        manufacturer: 'Undefined',
-        table: 'Undefined',
-        createdAt: 'Undefined'
-    })
-    
-    const repositoryStatistics = ref({
-        symbols: 'Undefined',
-        footprints: 'Undefined',
-        schLibFiles: 'Undefined',
-        pcbLibFiles: 'Undefined'
-    })
+    const LOADING = '…'
+    const FAILED = '—'
 
-    const elements = ref('Undefined')
-    const tables = ref('Undefined')
-    const manufacturers = ref('Undefined')
-    const suppliers = ref('Undefined')
-    const numberOfManufacturers = ref({})
-    const numberOfTables = ref({})
+    const elements = ref(LOADING)
+    const elementsToday = ref(LOADING)
+    const lastAdded = ref(null)
+    const repositoryStatistics = ref({ symbols: LOADING, footprints: LOADING })
+    const categories = ref({})
 
-    const updater = async () =>
+    const valueOr = (response, fallback) => response?.status == 200 ? response.data : fallback
+
+    const startOfToday = () =>
     {
-        let data = await element.lastAdded()
-        if(data.status == 200)
-        {
-            data.data.createdAt = dateUTCtoDestination(data.data.createdAt)
-            lastAddedElement.value = data.data
-        }
-
-        repositoryStatistics.value = (await repository.statistics()).data
-        elements.value = (await element.number()).data
-        tables.value = (await table.number()).data
-        manufacturers.value = (await manufacturer.number()).data
-        suppliers.value = (await supplier.number()).data
-        numberOfTables.value = (await table.numbers()).data
-        numberOfManufacturers.value = (await manufacturer.numbers()).data
+        const now = new Date()
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate())
     }
-    let updaterInverval = null
 
-    onMounted(async () =>
+    const updateDatabase = async () =>
     {
-        updater()
-        updaterInverval = setInterval(updater, 5000)
+        const [total, today, last, perCategory] = await Promise.all([
+            element.number(),
+            element.number(startOfToday()),
+            element.lastAdded(),
+            table.numbers(),
+        ])
+        elements.value = valueOr(total, FAILED)
+        elementsToday.value = valueOr(today, FAILED)
+        // 404 means the database is simply empty.
+        lastAdded.value = valueOr(last, null)
+        categories.value = valueOr(perCategory, categories.value)
+    }
+
+    // Counting symbols/footprints parses every library file on the first call after a
+    // commit, so a slow request must not be stacked with another one.
+    let repositoryPending = false
+    const updateRepository = async () =>
+    {
+        if (repositoryPending)
+        {
+            return
+        }
+        repositoryPending = true
+        const response = await repository.statistics()
+        repositoryPending = false
+        repositoryStatistics.value = valueOr(response, { symbols: FAILED, footprints: FAILED })
+    }
+
+    const update = () =>
+    {
+        updateDatabase()
+        updateRepository()
+    }
+
+    let updateInterval = null
+
+    onMounted(() =>
+    {
+        update()
+        updateInterval = setInterval(update, 5000)
     })
+
+    onUnmounted(() => clearInterval(updateInterval))
 </script>
 
 <template>
@@ -58,99 +77,196 @@
 
         <WarningAlert></WarningAlert>
 
-        <onyks-header level="3">Overview</onyks-header>
+        <div class="dashboard-grid">
 
-        <onyks-container gap="l" type="grid" cols="2">
+            <div class="card large-card">
+                <h2>Collected elements</h2>
+                <div class="stat-number">{{ elements }}</div>
+                <p class="stat-label">Total number of elements</p>
+                <p><strong>New today: </strong>{{ elementsToday }}</p>
+                <p>
+                    <strong>Last added: </strong>
+                    <router-link v-if="lastAdded" :to="`/element/details/${lastAdded.uuid}`">
+                        {{ lastAdded.partName }}
+                    </router-link>
+                    <span v-else>None</span>
+                    <span v-if="lastAdded" class="muted"> ({{ lastAdded.table }})</span>
+                </p>
+            </div>
 
-                <onyks-card title="Last added element" size="l">
-                    <onyks-container gap="m" padding="">
-                        <onyks-container type="group" align="center" padding="" cols="2">
-                            <onyks-header level="6">Part name:</onyks-header>
-                            <onyks-text>{{ lastAddedElement.partName}}</onyks-text>
-                        </onyks-container>
-                        <onyks-container type="group" align="center" padding="" cols="2">
-                            <onyks-header level="6">Manufacturer:</onyks-header>
-                            <onyks-text>{{ lastAddedElement.manufacturer || 'Undefined' }}</onyks-text>
-                        </onyks-container>
-                        <onyks-container type="group" align="center" padding="" cols="2">
-                            <onyks-header level="6">Table:</onyks-header>
-                            <onyks-text>{{ lastAddedElement.table || 'Undefined'}}</onyks-text>
-                        </onyks-container>
-                        <onyks-container type="group" align="center" padding="" cols="2">
-                            <onyks-header level="6">Created at:</onyks-header>
-                            <onyks-text>{{ lastAddedElement.createdAt || 'Undefined'}}</onyks-text>
-                        </onyks-container>
-                    </onyks-container>
-                </onyks-card>
+            <div class="small-cards">
+                <div class="card small-card">
+                    <h2>Footprints</h2>
+                    <div class="stat-number">{{ repositoryStatistics.footprints }}</div>
+                    <p class="stat-label">Available footprints</p>
+                </div>
+                <div class="card small-card">
+                    <h2>Symbols</h2>
+                    <div class="stat-number">{{ repositoryStatistics.symbols }}</div>
+                    <p class="stat-label">Available symbols</p>
+                </div>
+            </div>
 
+            <div class="categories-grid">
+                <div v-for="(count, name) in categories" :key="name" class="card category-card">
+                    <h3>{{ name }}</h3>
+                    <div class="category-stat">{{ count }}</div>
+                </div>
+                <p v-if="Object.keys(categories).length === 0" class="muted">There are no categories yet.</p>
+            </div>
 
-            <onyks-grid cols="4">
-                <onyks-card title="Elements" span="2" size="l">
-                    <onyks-header level="3">{{ elements }}</onyks-header>
-                </onyks-card>
-
-                <onyks-card title="Tables" span="2" size="l">
-                    <onyks-header level="3">{{ tables }}</onyks-header>
-                </onyks-card>
-
-                <onyks-card title="Manufacturers" span="2" size="l">
-                    <onyks-header level="3">{{ manufacturers }}</onyks-header>
-                </onyks-card>
-
-                <onyks-card title="Suppliers" span="2" size="l">
-                    <onyks-header level="3">{{ suppliers }}</onyks-header>
-                </onyks-card>
-            </onyks-grid>
-        </onyks-container>
-
-            <!-- <onyks-card title="Repository statistics" span="4" size="l">
-                <onyks-container gap="m" padding="">
-                    <onyks-container type="group" align="center" padding="" cols="2">
-                        <onyks-header level="6">Symbols:</onyks-header>
-                        <onyks-text>{{ repositoryStatistics.symbols }}</onyks-text>
-                    </onyks-container>
-                    <onyks-container type="group" align="center" padding="" cols="2">
-                        <onyks-header level="6">Footprints:</onyks-header>
-                        <onyks-text>{{ repositoryStatistics.footprints }}</onyks-text>
-                    </onyks-container>
-                    <onyks-container type="group" align="center" padding="" cols="2">
-                        <onyks-header level="6">*.SchLib files:</onyks-header>
-                        <onyks-text>{{ repositoryStatistics.schLibFiles }}</onyks-text>
-                    </onyks-container>
-                    <onyks-container type="group" align="center" padding="" cols="2">
-                        <onyks-header level="6">.PcbLib files:</onyks-header>
-                        <onyks-text>{{repositoryStatistics.pcbLibFiles}}</onyks-text>
-                    </onyks-container>
-                </onyks-container>
-            </onyks-card> -->
-
-        <onyks-header level="3">Tables</onyks-header>
-
-        <onyks-grid cols="6" v-if="Object.keys(numberOfTables).length > 0"  gap="l">
-            <onyks-card v-for="(number, name) in numberOfTables" :key="name" :title="name" span="2" size="l">
-                <onyks-header level="2">{{ number }}</onyks-header>
-            </onyks-card>
-        </onyks-grid>
-
-        <onyks-text v-else>There is no tables to show.</onyks-text>
-
-        <onyks-header level="3">Manufacturers</onyks-header>
-        
-        <onyks-grid cols="6" v-if="Object.keys(numberOfManufacturers).length > 0"  gap="l">
-            <onyks-card v-for="(number, name) in numberOfManufacturers" :title="name" span="2" size="l">
-                <onyks-header level="2">{{ number }}</onyks-header>
-            </onyks-card>
-        </onyks-grid>
-
-        <onyks-text v-else>There is no manufacturers to show.</onyks-text>
+        </div>
 
     </onyks-container>
 </template>
 
 <style scoped>
-    onyks-container > onyks-header
+    .dashboard-grid
     {
-        width: 120px;
-        text-align: left;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas: "large small" "categories categories";
+        gap: var(--onyks-spacing-md);
+        width: 100%;
+        font-family: var(--onyks-font);
+        color: var(--onyks-on-surface-1);
+    }
+
+    .card
+    {
+        background-color: var(--onyks-surface-1);
+        border: 1px solid var(--onyks-surface-1-border);
+        border-radius: var(--onyks-radius-lg);
+        box-sizing: border-box;
+        transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .large-card, .small-card
+    {
+        padding: 2rem;
+    }
+
+    .large-card:hover, .small-card:hover
+    {
+        transform: translateY(-8px);
+        box-shadow: 0 1rem 2rem var(--onyks-surface-1-border);
+        border-color: var(--onyks-accent);
+    }
+
+    .large-card
+    {
+        grid-area: large;
+        min-height: 300px;
+    }
+
+    .small-cards
+    {
+        grid-area: small;
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        gap: var(--onyks-spacing-md);
+    }
+
+    h2
+    {
+        font-size: 1.5rem;
+        color: var(--onyks-accent);
+        font-weight: 600;
+        margin: 0 0 24px 0;
+        padding-bottom: 12px;
+        position: relative;
+    }
+
+    h2::after
+    {
+        content: '';
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 48px;
+        height: 2px;
+        background-color: var(--onyks-accent);
+    }
+
+    .stat-number
+    {
+        font-size: 4rem;
+        font-weight: bold;
+        line-height: 1;
+        margin: 1rem 0;
+    }
+
+    .small-card .stat-number
+    {
+        font-size: 2.5rem;
+    }
+
+    .stat-label
+    {
+        font-size: 1.2rem;
+        opacity: 0.7;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .muted
+    {
+        opacity: 0.7;
+    }
+
+    a
+    {
+        color: var(--onyks-accent);
+    }
+
+    .categories-grid
+    {
+        grid-area: categories;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--onyks-spacing-md);
+    }
+
+    .category-card
+    {
+        padding: 1.5rem;
+        text-align: center;
+    }
+
+    .category-card:hover
+    {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem var(--onyks-surface-1-border);
+        border-color: var(--onyks-accent);
+    }
+
+    h3
+    {
+        font-size: 1.1rem;
+        color: var(--onyks-accent);
+        font-weight: 600;
+        margin: 0 0 1rem 0;
+        overflow-wrap: anywhere;
+    }
+
+    .category-stat
+    {
+        font-size: 2.5rem;
+        font-weight: bold;
+        line-height: 1;
+        margin: 0.5rem 0;
+    }
+
+    @media (max-width: 900px)
+    {
+        .dashboard-grid
+        {
+            grid-template-columns: 1fr;
+            grid-template-areas: "large" "small" "categories";
+        }
+
+        .categories-grid
+        {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
     }
 </style>

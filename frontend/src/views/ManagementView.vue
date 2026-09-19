@@ -2,7 +2,7 @@
     import WarningAlert from '@/components/WarningAlert.vue'
     import BasicButtonsPanel from '@/components/BasicButtonsPanel.vue'
     import BasicTable from '@/components/BasicTable.vue'
-    import {onMounted, ref, toRaw} from 'vue'
+    import {onMounted, ref, toRaw, watch, inject} from 'vue'
     import { manufacturer, supplier, table, element } from '@/utils/api'
     import AddItemDialog from '@/components/AddItemDialog.vue'
     import EditItemDialog from '@/components/EditItemDialog.vue'
@@ -10,8 +10,43 @@
     import { LabelsDoc } from '@/utils/tools'
     import { useRouter } from 'vue-router'
     import ColumnsCheckboxes from '@/components/ColumnsCheckboxes.vue'
+    import CategoryFilter from '@/components/CategoryFilter.vue'
+    import { readStorage, writeStorage } from '@/utils/storage.js'
 
     const router = useRouter()
+
+    const fullWidth = inject('fullWidth')
+    const toggleFullWidth = inject('toggleFullWidth')
+
+    const elementsSearch = ref(readStorage('onyks-management-search', ''))
+    const elementsSelectedTables = ref(readStorage('onyks-management-tables', null))
+    const elementsAvailableTables = ref([])
+
+    const elementsListUpdate = (limit, skip) =>
+        element.list(limit, skip, elementsSearch.value, elementsSelectedTables.value)
+
+    const loadElementsAvailableTables = async () =>
+    {
+        let data = await table.numbers()
+        if (data.status == 200)
+        {
+            elementsAvailableTables.value = Object.keys(data.data)
+        }
+    }
+
+    let elementsSearchDebounce = null
+    watch(elementsSearch, (value) =>
+    {
+        writeStorage('onyks-management-search', value)
+        clearTimeout(elementsSearchDebounce)
+        elementsSearchDebounce = setTimeout(() => elements.value.table?.init(), 300)
+    })
+
+    watch(elementsSelectedTables, (value) =>
+    {
+        writeStorage('onyks-management-tables', value)
+        elements.value.table?.init()
+    })
 
     const elements = ref({
         table: null,
@@ -57,12 +92,12 @@
             },
             {
                 "key": "libraryReference",
-                "label": "Library Reference",
+                "label": "Symbol Reference",
                 "hidden": false
             },
             {
                 "key": "libraryPath",
-                "label": "Library Path",
+                "label": "Symbol Path",
                 "hidden": false
             },
             {
@@ -462,13 +497,14 @@
         suppliers.value.success()
     }
 
-    onMounted(() => 
+    onMounted(() =>
     {
         manufacturers.value.table.init()
         suppliers.value.table.init()
         tables.value.table.init()
         elements.value.table.init()
         elements.value.updateColumns()
+        loadElementsAvailableTables()
     })
 </script>
 
@@ -481,32 +517,10 @@
 
         <!-- ELEMENTS -->
         <onyks-header level="3">Elements</onyks-header>
-        <BasicButtonsPanel>
-            <onyks-button background="green" 
-                @click="() => elements.action('add')">Add</onyks-button>
-            <onyks-button background="blue"
-                @click="() => elements.action('edit')" 
-                :disabled="elements?.disabled.edit">Edit</onyks-button>
-            <onyks-button
-                @click="() => elements.action('delete')"
-                :disabled="elements?.disabled.delete">Delete</onyks-button>
 
-            <onyks-button background="yellow" 
-                @click="() => elements.action('duplicate')"
-                :disabled="elements?.disabled.duplicate">Duplicate</onyks-button>
+        <onyks-textfield size="m" placeholder="Search elements..." type="text" v-model="elementsSearch"></onyks-textfield>
 
-            <onyks-button background="green" 
-                @click="() => elements.action('datasheet')"
-                :disabled="elements?.disabled.datasheet">Datasheet</onyks-button>
-            
-            <onyks-button background="blue" 
-                @click="() => elements.action('labels')"
-                :disabled="elements?.disabled.labels">Labels</onyks-button>
-            
-            <onyks-button background="red" 
-                @click="() => elements.action('details')"
-                :disabled="elements?.disabled.details">Details</onyks-button>
-        </BasicButtonsPanel>
+        <CategoryFilter :names="elementsAvailableTables" v-model="elementsSelectedTables"></CategoryFilter>
 
         <ColumnsCheckboxes
             :model-value="elements?.columns.slice(1)"
@@ -514,11 +528,40 @@
             @update:model-value="(columns) => { if (elements) elements.columns = [elements.columns[0], ...columns] }">
         </ColumnsCheckboxes>
 
-        <BasicTable :ref="(el) => { if (el && elements) elements.table = el }" 
+        <onyks-button size="s" background="blue" @click="toggleFullWidth">{{ fullWidth ? 'Collapse table' : 'Expand table' }}</onyks-button>
+
+        <BasicTable :ref="(el) => { if (el && elements) elements.table = el }"
                 :columns="elements?.columns"
-                :update="element.list"
+                :update="elementsListUpdate"
                 @checkbox-click="elements?.disable"></BasicTable>
-        
+
+        <BasicButtonsPanel>
+            <onyks-button background="green"
+                @click="() => elements.action('add')">Add</onyks-button>
+            <onyks-button background="blue"
+                @click="() => elements.action('edit')"
+                :disabled="elements?.disabled.edit">Edit</onyks-button>
+            <onyks-button
+                @click="() => elements.action('delete')"
+                :disabled="elements?.disabled.delete">Delete</onyks-button>
+
+            <onyks-button background="yellow"
+                @click="() => elements.action('duplicate')"
+                :disabled="elements?.disabled.duplicate">Duplicate</onyks-button>
+
+            <onyks-button background="green"
+                @click="() => elements.action('datasheet')"
+                :disabled="elements?.disabled.datasheet">Datasheet</onyks-button>
+
+            <onyks-button background="blue"
+                @click="() => elements.action('labels')"
+                :disabled="elements?.disabled.labels">Labels</onyks-button>
+
+            <onyks-button background="red"
+                @click="() => elements.action('details')"
+                :disabled="elements?.disabled.details">Details</onyks-button>
+        </BasicButtonsPanel>
+
         <DeleteItemDialog
             subject="element(s)"
             :processor="(item) => item.uuid"
@@ -670,5 +713,11 @@
         margin: var(--onyks-spacing-md);
         z-index: 100;
         display: none;
+    }
+
+    onyks-textfield
+    {
+        width: 100%;
+        max-width: 400px;
     }
 </style>

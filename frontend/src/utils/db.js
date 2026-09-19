@@ -20,6 +20,7 @@ export class ElementModel
         this.manufacturer = args?.manufacturer || '';
         this.suppliers = args?.suppliers || {};
         this.datasheet = args?.datasheet || false;
+        this.docsCount = args?.docsCount || 0;
         this.table = args?.table || ''
     }
 }
