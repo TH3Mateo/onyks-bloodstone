@@ -1,6 +1,17 @@
 <script setup>
     import { useRoute } from 'vue-router'
+    import { ref, provide } from 'vue'
+    import { readStorage, writeStorage } from '@/utils/storage.js'
     const route = useRoute()
+
+    const fullWidth = ref(readStorage('onyks-full-width', false))
+    const toggleFullWidth = () =>
+    {
+        fullWidth.value = !fullWidth.value
+        writeStorage('onyks-full-width', fullWidth.value)
+    }
+    provide('fullWidth', fullWidth)
+    provide('toggleFullWidth', toggleFullWidth)
 </script>
 
 <template>
@@ -9,8 +20,9 @@
         <router-link slot="nav" to="/dashboard" .selected="route.path.endsWith('/dashboard')">Dashboard</router-link>
         <router-link slot="nav" to="/management" .selected="route.path.endsWith('/management')">Management</router-link>
         <router-link slot="nav" to="/repository" .selected="route.path.endsWith('/repository')">Repository</router-link>
+        <router-link slot="nav" to="/settings" .selected="route.path.endsWith('/settings')">Settings</router-link>
     </onyks-nav>
-    <main>
+    <main :class="{ 'full-width': fullWidth }">
         <router-view v-slot="{ Component, route }">
             <transition name="fade" mode="out-in">
                 <div :key="route.path">
@@ -54,6 +66,14 @@
         margin-right: auto;
         min-height: 100vh;
         box-sizing: border-box;
+        transition: max-width 0.2s ease;
+    }
+
+    main.full-width
+    {
+        max-width: none;
+        padding-left: var(--onyks-spacing-lg);
+        padding-right: var(--onyks-spacing-lg);
     }
 
     footer

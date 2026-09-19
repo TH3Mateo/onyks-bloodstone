@@ -47,7 +47,9 @@ export const repository =
     {
         try 
         {
-            const response = await api.get(`/repository/statistics`);
+            // The first call after a commit re-parses every library file, which can
+            // take longer than the default 5 s timeout.
+            const response = await api.get(`/repository/statistics`, { timeout: 120000 });
             return response
         } 
         catch (error) 
@@ -72,11 +74,13 @@ export const element =
             return error
         }
     },
-    number: async () =>
+    number: async (since = null) =>
     {
         try 
         {
-            const response = await api.get(`/element/number`);
+            const response = await api.get(`/element/number`, {
+                params: { since: since ? since.toISOString() : undefined }
+            });
             return response
         } 
         catch (error) 
@@ -144,19 +148,21 @@ export const element =
             return error
         }
     },
-    list: async (limit, skip) =>
+    list: async (limit, skip, search = null, tables = null) =>
     {
-        try 
+        try
         {
             const response = await api.get(`/element/list`, {
                 params: {
                     limit: limit,
-                    skip: skip
+                    skip: skip,
+                    search: search || undefined,
+                    tables: (tables && tables.length) ? tables.join(',') : undefined
                 }
             });
             return response
-        } 
-        catch (error) 
+        }
+        catch (error)
         {
             return error
         }
@@ -199,6 +205,46 @@ export const element =
     openDatasheet: (uuid) =>
     {
         window.open(`/files/${uuid}.pdf`, '_blank');
+    }
+}
+
+// Additional documents are stored as <uuid>_1.pdf .. <uuid>_N.pdf next to the main
+// datasheet; the element's docsCount is the only thing kept in the database.
+export const elementDocument =
+{
+    upload: async (elementUuid, file) =>
+    {
+        try
+        {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await api.post(`/element/${elementUuid}/documents`, formData,
+            {
+                headers: {'Content-Type': 'multipart/form-data'}
+            });
+            return response
+        }
+        catch (error)
+        {
+            return error
+        }
+    },
+    delete: async (elementUuid, index) =>
+    {
+        try
+        {
+            const response = await api.delete(`/element/${elementUuid}/documents/${index}`);
+            return response
+        }
+        catch (error)
+        {
+            return error
+        }
+    },
+    open: (elementUuid, index) =>
+    {
+        window.open(`/files/${elementUuid}_${index}.pdf`, '_blank');
     }
 }
 
@@ -466,6 +512,30 @@ export const supplier =
         {
             return error
         }
+    }
+}
+
+export const settings =
+{
+    identity: async () =>
+    {
+        try
+        {
+            const response = await api.get(`/server/identity`);
+            return response
+        }
+        catch (error)
+        {
+            return error
+        }
+    },
+    downloadDbLib: () =>
+    {
+        window.open('/api/settings/dblib', '_blank');
+    },
+    downloadKicadDbl: () =>
+    {
+        window.open('/api/settings/kicad-dbl', '_blank');
     }
 }
 

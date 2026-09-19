@@ -41,6 +41,9 @@ class User(Base):
         nullable=False,
         default=UserRank.viewer,
     )
+    # Which CAD tool this person uses; decides whether their database role is granted
+    # altium_* or kicad_* membership, and therefore which schema they can read.
+    tool = Column(String(16), nullable=False, default='altium', server_default='altium')
 
 class Manufacturer(Base):
     __tablename__ = "manufacturers"
@@ -91,7 +94,12 @@ class Element(Base):
     value = Column('value', String(1024), nullable=True, default='')
     availability = Column('availability', String(1024), nullable=True, default='')
     datasheet = Column(Boolean, nullable=False, default=False)
-    
+
+    # Number of ADDITIONAL documents stored as <uuid>_1.pdf .. <uuid>_N.pdf.
+    # The main datasheet (<uuid>.pdf) is tracked by the `datasheet` flag above and is
+    # the only one exposed to Altium/KiCad through the views' HelpURL/Datasheet column.
+    docsCount = Column('docs_count', Integer, nullable=False, default=0, server_default='0')
+
     libraryReference = Column('library_ref', String(1024), nullable=True, default='')
     libraryPath = Column('library_path', String(1024), nullable=True, default='')
     

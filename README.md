@@ -94,11 +94,55 @@ docker exec -it onyks-bloodstone-database psql -U appuser -d appdb
 ```
 
 
-In the PostgreSQL shell, add a user with your preferred credentials:
+Use the management script from the project directory — it asks for the password so it
+never lands in your shell history:
+
 ```bash
-INSERT INTO private.users (login, password, email, rank)
-VALUES ('admin', crypt('admin', gen_salt('bf')), 'admin@test.pl', 'editor');
+./manage-users.sh add admin admin@test.pl editor altium
+./manage-users.sh list
 ```
+
+It wraps a SQL function you can also call directly from the PostgreSQL shell:
+```sql
+SELECT private.user_create('admin', 'your-password', 'admin@test.pl', 'editor', 'altium');
+```
+
+Do **not** `INSERT` into `private.users` directly. One account is one login and password
+used for SVN and for the CAD tool's ODBC connection, and only this function sets both,
+because it is the only point at which the plaintext password exists. SVN authenticates
+against a bcrypt hash, PostgreSQL stores a SCRAM verifier, and neither can be derived
+from the other.
+
+A direct `INSERT` also stores the wrong hash format. Apache's `mod_authn_dbd`, which
+authenticates SVN, accepts bcrypt only with the `$2y$` prefix and rejects the `$2a$` that
+`crypt(..., gen_salt('bf'))` produces, even though both are the same algorithm. Accounts
+created with a plain `INSERT` can therefore never log in to SVN.
+
+- `rank` is `viewer`, `editor` or `admin`, and limits the **web application only** —
+  a `viewer` cannot create component categories. It does not restrict SVN: every account
+  gets read-write access there, because adding a component means committing its
+  `.SchLib`/`.PcbLib` files. Database access over ODBC is read-only for everyone.
+  `viewer` joins the `<tool>_users` group, `editor` and `admin` join `<tool>_editors`.
+- `tool` is `altium` or `kicad`, and decides which set of component tables the account
+  can read over ODBC. It cannot read the other tool's tables, the `private` schema, or
+  write anything.
+- `login` must be 3–63 characters: lowercase letters, digits and underscores, starting
+  with a letter. It becomes a PostgreSQL role name.
+
+The ODBC data source on each workstation must point at the tool's own database —
+`altium_lib` for Altium, `kicad_lib` for KiCad — not at the application database. Each
+contains nothing but one view per component category, named exactly like the category,
+so the CAD tool lists only those. Personal accounts cannot connect to the application
+database at all.
+
+To change a password in all three places at once:
+```sql
+SELECT private.user_set_password('admin', 'new-password');
+```
+
+Changing someone's `rank` or `tool` with a normal `UPDATE` moves their group membership
+automatically, and `DELETE`ing the row removes their database role. Only creating an
+account and changing a password need the functions above.
 
 When finished, exit PostgreSQL by typing:
 ```bash

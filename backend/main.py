@@ -15,10 +15,14 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status, Path
 from sqlalchemy import select
 import uuid
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.staticfiles import StaticFiles
+from fastapi import Response
 from pydantic import Json
+import json
+import asyncio
+from datetime import datetime
 
 app = FastAPI()
 
@@ -38,7 +42,22 @@ async def startup_db():
         async with engine.begin() as conn:
             await conn.execute(text("CREATE SCHEMA IF NOT EXISTS private;"))
             await conn.run_sync(models.Base.metadata.create_all)
+
+            # create_all() only adds missing TABLES, never missing columns, so new
+            # columns on already-existing tables need explicit idempotent DDL here.
+            await conn.execute(text(
+                "ALTER TABLE private.elements "
+                "ADD COLUMN IF NOT EXISTS docs_count INTEGER NOT NULL DEFAULT 0"
+            ))
+            # Superseded by elements.docs_count + the <uuid>_N.pdf naming convention.
+            await conn.execute(text("DROP TABLE IF EXISTS private.element_documents"))
+
             await utils.dbCreateOrUpdateElementViews(conn)
+
+        # Separate transaction: dbCreateOrUpdateElementViews commits internally, which
+        # closes the block above.
+        async with engine.begin() as conn:
+            await utils.dbEnsureUserRoleSystem(conn)
     except Exception as e:
         print(f"❌❌❌ DB Startup Failed: {e}")
         raise e
@@ -61,6 +80,19 @@ async def repositoryList(path: str):
             return utils.repositoryGetFolderList(*enterData)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+def documentPath(element_uuid, index):
+    """Additional documents live next to the main datasheet as <uuid>_1.pdf .. <uuid>_N.pdf."""
+    return os.path.join(UPLOAD_DIR, f"{element_uuid}_{index}.pdf")
+
+def cleanupElementFiles(element_uuid, pdf_path, docs_count):
+    """Removes a half-written element's PDFs after a rolled back transaction."""
+    if pdf_path is not None and os.path.isfile(pdf_path):
+        os.remove(pdf_path)
+    for index in range(1, docs_count + 1):
+        document_path = documentPath(element_uuid, index)
+        if os.path.isfile(document_path):
+            os.remove(document_path)
 
 # ELEMENT
 @app.post("/element/create")
@@ -165,6 +197,15 @@ async def elementDuplicate(
                                     detail="The source element has no datasheet.")
             shutil.copyfile(old_pdf_path, new_pdf_path)
             item.datasheet = True
+
+            # Keeping the datasheet implies keeping the rest of the documentation too.
+            copied = 0
+            for index in range(1, (source.docsCount or 0) + 1):
+                source_document = documentPath(source.uuid, index)
+                if os.path.isfile(source_document):
+                    copied += 1
+                    shutil.copyfile(source_document, documentPath(item.uuid, copied))
+            item.docsCount = copied
         elif change_mode == 2:
             with open(new_pdf_path, "wb") as pdf_file:
                 while chunk := await datasheet.read(1024 * 1024):
@@ -176,13 +217,11 @@ async def elementDuplicate(
         return item
     except IntegrityError:
         await db.rollback()
-        if os.path.isfile(new_pdf_path):
-            os.remove(new_pdf_path)
+        cleanupElementFiles(item.uuid, new_pdf_path, source.docsCount or 0)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
     except Exception:
         await db.rollback()
-        if os.path.isfile(new_pdf_path):
-            os.remove(new_pdf_path)
+        cleanupElementFiles(item.uuid, new_pdf_path, source.docsCount or 0)
         raise
 
 @app.get('/element/last-added')
@@ -206,8 +245,12 @@ async def elementLastAdded(db = Depends(get_db)):
     return item
 
 @app.get('/element/number')
-async def elementNumber(db = Depends(get_db)):
+async def elementNumber(since: datetime | None = Query(default=None), db = Depends(get_db)):
+    """Number of elements; with `since`, only those created at or after that moment
+    (the dashboard passes the viewer's local midnight to get "new today")."""
     query = select(func.count()).select_from(models.Element)
+    if since is not None:
+        query = query.where(models.Element.createdAt >= since)
     result = await db.execute(query)
     totalCount = result.scalar()
     return totalCount
@@ -215,13 +258,34 @@ async def elementNumber(db = Depends(get_db)):
 @app.get("/element/list")
 async def elementList(limit: int = Query(default=10, ge=1, le=100),
     skip: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None),
+    tables: str | None = Query(default=None),
     db = Depends(get_db)):
 
+    filters = []
+    if search:
+        pattern = f"%{search}%"
+        filters.append(or_(
+            models.Element.partName.ilike(pattern),
+            models.Element.manufacturer.ilike(pattern),
+            models.Element.description.ilike(pattern),
+            models.Element.value.ilike(pattern),
+        ))
+    if tables:
+        tableNames = [name for name in tables.split(',') if name]
+        if tableNames:
+            filters.append(models.Element.table.in_(tableNames))
+
     query = select(func.count()).select_from(models.Element)
+    for condition in filters:
+        query = query.where(condition)
     result = await db.execute(query)
     totalCount = result.scalar()
-    
-    queryEntries = select(models.Element).offset(skip).limit(limit)
+
+    queryEntries = select(models.Element)
+    for condition in filters:
+        queryEntries = queryEntries.where(condition)
+    queryEntries = queryEntries.offset(skip).limit(limit)
     entriesResult = await db.execute(queryEntries)
     entries = []
     for item in entriesResult.scalars().all():
@@ -242,7 +306,7 @@ async def elementDelete(id: uuid.UUID, db = Depends(get_db)):
     query = select(models.Element).where(models.Element.uuid == id)
     result = await db.execute(query)
     item = result.scalar_one_or_none()
-    
+
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -252,11 +316,76 @@ async def elementDelete(id: uuid.UUID, db = Depends(get_db)):
     pdf_path = os.path.join(UPLOAD_DIR, f"{id}.pdf")
     if os.path.isfile(pdf_path):
         os.remove(pdf_path)
-    
+
+    for index in range(1, (item.docsCount or 0) + 1):
+        document_path = documentPath(id, index)
+        if os.path.isfile(document_path):
+            os.remove(document_path)
+
     await db.delete(item)
     await db.commit()
-    
+
     return id
+
+# ELEMENT DOCUMENTS (additional datasheets / application notes / register maps, etc.)
+# Stored next to the main datasheet as <uuid>_1.pdf .. <uuid>_N.pdf, where N is the
+# element's docs_count. Numbering is always contiguous, so deleting one renumbers the
+# rest. Altium and KiCad never see these — they only get the main <uuid>.pdf link.
+@app.post('/element/{id}/documents')
+async def elementDocumentCreate(id: uuid.UUID, file: UploadFile = File(...), db = Depends(get_db)):
+    if file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document must be a PDF file."
+        )
+
+    result = await db.execute(select(models.Element).where(models.Element.uuid == id))
+    item = result.scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UUID doesn't exist!")
+
+    index = (item.docsCount or 0) + 1
+    file_path = documentPath(id, index)
+
+    try:
+        with open(file_path, "wb") as document_file:
+            while chunk := await file.read(1024 * 1024):
+                document_file.write(chunk)
+
+        item.docsCount = index
+        await db.commit()
+        return {"index": index, "docsCount": index}
+    except Exception:
+        await db.rollback()
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+        raise
+
+@app.delete('/element/{id}/documents/{index}')
+async def elementDocumentDelete(id: uuid.UUID, index: int, db = Depends(get_db)):
+    result = await db.execute(select(models.Element).where(models.Element.uuid == id))
+    item = result.scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UUID doesn't exist!")
+
+    total = item.docsCount or 0
+    if index < 1 or index > total:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document doesn't exist!")
+
+    removed_path = documentPath(id, index)
+    if os.path.isfile(removed_path):
+        os.remove(removed_path)
+
+    # Shift every later document down one slot so 1..N stays contiguous.
+    for position in range(index + 1, total + 1):
+        source_path = documentPath(id, position)
+        if os.path.isfile(source_path):
+            os.replace(source_path, documentPath(id, position - 1))
+
+    item.docsCount = total - 1
+    await db.commit()
+
+    return {"index": index, "docsCount": item.docsCount}
 
 @app.put('/element/edit/{id}')
 async def elementEdit(id: uuid.UUID, element: str = Form(...), datasheet: UploadFile | None = File(default=None), db = Depends(get_db)):
@@ -646,15 +775,72 @@ async def tableID(id: int, db = Depends(get_db)):
         "numberOfItems": elements_count
     }
 
+# Parsing every library file takes a while, so the result is kept until the repository
+# gets a new revision. The dashboard polls every few seconds; only the first request
+# after a commit pays for the recount.
+repositoryStatisticsCache = {"revision": None, "data": None}
+repositoryStatisticsLock = asyncio.Lock()
+
 @app.get('/repository/statistics')
 async def repositoryStatistics():
-    data = {}
-    data['symbols'] = 1
-    data['footprints'] = 2
-    data['schLibFiles'] = 3
-    data['pcbLibFiles'] = 4
-    return data
+    url = "file:///local_svn"
+    try:
+        revision = await asyncio.to_thread(utils.repositoryGetRevision, url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot read the repository: {e}")
+
+    async with repositoryStatisticsLock:
+        if repositoryStatisticsCache["revision"] != revision:
+            try:
+                data = await asyncio.to_thread(utils.repositoryComputeStatistics, url)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Cannot read the repository: {e}")
+            repositoryStatisticsCache["revision"] = revision
+            repositoryStatisticsCache["data"] = data
+
+    return {**repositoryStatisticsCache["data"], "revision": revision}
 
 @app.get('/server/identity')
-async def repositoryStatistics():
-    return 'ONYKS Bloodstone'
+async def serverIdentity():
+    return {
+        "name": "Onyks Bloodstone",
+        "svnRepository": os.getenv("SVN_REPO_NAME", ""),
+        "databaseHost": _publicDatabaseHost(),
+        "databasePort": os.getenv("POSTGRES_PORT", ""),
+        "databaseName": os.getenv("POSTGRES_DB", ""),
+        # What a CAD tool's ODBC data source must point at -- not the application database.
+        "altiumDatabase": utils.LIBRARY_DATABASES[utils.ALTIUM_SCHEMA],
+        "kicadDatabase": utils.LIBRARY_DATABASES[utils.KICAD_SCHEMA],
+    }
+
+def _publicDatabaseHost():
+    from urllib.parse import urlparse
+    parsed = urlparse(os.getenv("PUBLIC_FILES_URL", "http://localhost/"))
+    return parsed.hostname or "localhost"
+
+@app.get('/settings/dblib')
+async def settingsDbLib(db = Depends(get_db)):
+    tableMap = await utils.getCategoryViewMap(db)
+    supplierMap = await utils.getSupplierColumnMap(db)
+    content = utils.generateAltiumDbLib(tableMap, supplierMap)
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={"Content-Disposition": 'attachment; filename="onyks_bloodstone.DbLib"'}
+    )
+
+@app.get('/settings/kicad-dbl')
+async def settingsKicadDbl(db = Depends(get_db)):
+    tableMap = await utils.getCategoryViewMap(db)
+    supplierMap = await utils.getSupplierColumnMap(db)
+    content = utils.generateKicadDbl(
+        tableMap, supplierMap,
+        host=_publicDatabaseHost(),
+        port=os.getenv("POSTGRES_PORT", "5432"),
+        database=utils.LIBRARY_DATABASES[utils.KICAD_SCHEMA]
+    )
+    return Response(
+        content=json.dumps(content, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="onyks_bloodstone.kicad_dbl"'}
+    )

@@ -1,5 +1,5 @@
 <script setup>
-    import { ref } from 'vue';
+    import { ref, onMounted, onUnmounted } from 'vue';
     import RepositoryExplorer from './RepositoryExplorer.vue';
     import { defineExpose } from 'vue';
 
@@ -13,10 +13,21 @@
         filter: null,
     })
 
-    const open = (parametr) => 
+    const open = (parametr) =>
     {
         dialog.value.open = true
     };
+
+    const handleKeydown = (e) =>
+    {
+        if (e.key === 'Escape' && dialog.value?.open)
+        {
+            dialog.value.open = false
+        }
+    };
+
+    onMounted(() => window.addEventListener('keydown', handleKeydown))
+    onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
     defineExpose({
         open

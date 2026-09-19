@@ -1,0 +1,2 @@
+- [Local .claude storage preference](feedback_local_claude_storage.md) — store plans/memory in project .claude, not home/.claude
+- [UI fixes plan](../plans/ui-fixes-plan.md) — full staged plan for issues.json, UI-first

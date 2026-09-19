@@ -75,3 +75,4 @@ class TableFull(TableBase):
 class TableList(BaseModel):
     total: int
     items: List[TableFull]
+
