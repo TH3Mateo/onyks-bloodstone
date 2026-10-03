@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, constr, field_validator, model_validator
 from datetime import datetime
 from typing import List, Optional, Generic, TypeVar
 from fastapi import Query
@@ -39,6 +39,24 @@ class ElementBase(BaseModel):
     footprintPathNo3: NotEmptyString = Field(max_length=1024)
     manufacturer: NotEmptyString = Field(max_length=256)
     table: NotEmptyString = Field(max_length=256)
+
+    # Library paths are relative to the repository root, which Altium/KiCad already search
+    # from, so they must start with the top-level folder (never with the repository name)
+    # and point at a library file. A reference and its path only make sense together.
+    @model_validator(mode='after')
+    def checkLibraryPaths(self):
+        pairs = [
+            ("Symbol", self.libraryReference, self.libraryPath, "symbols/", ".schlib"),
+            ("Footprint 1", self.footprintReferenceNo1, self.footprintPathNo1, "footprints/", ".pcblib"),
+            ("Footprint 2", self.footprintReferenceNo2, self.footprintPathNo2, "footprints/", ".pcblib"),
+            ("Footprint 3", self.footprintReferenceNo3, self.footprintPathNo3, "footprints/", ".pcblib"),
+        ]
+        for label, reference, path, prefix, extension in pairs:
+            if (reference is None) != (path is None):
+                raise ValueError(f"{label}: reference and path must be set together.")
+            if path is not None and not (path.startswith(prefix) and path.lower().endswith(extension)):
+                raise ValueError(f"{label}: path must start with '{prefix}' and point at a {extension} file.")
+        return self
 
 
 class ElementFull(ElementBase):

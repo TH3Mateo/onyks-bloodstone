@@ -101,7 +101,7 @@
                     </onyks-container>
                     <onyks-button v-if="props.type != 'details'" background="blue" @click="dialogs?.library?.open">Select Symbol</onyks-button>
 
-                    <RepositoryModelSelector v-if="props.type != 'details'" :filter="filters.symbol"
+                    <RepositoryModelSelector v-if="props.type != 'details'" :filter="filters.symbol" root="symbols" leaf-type="symbol"
                         title="symbol" :ref="(el) => { if (el && dialogs) dialogs.library = el }"
                         @model-select="(e) => {model.libraryReference = e.name; model.libraryPath = e.path.join('/')}">
                     </RepositoryModelSelector>
@@ -115,7 +115,7 @@
                     </onyks-container>
                     <onyks-button v-if="props.type != 'details'" background="yellow" @click="dialogs?.footprint1?.open">Select Footprint 1</onyks-button>
 
-                    <RepositoryModelSelector v-if="props.type != 'details'" :filter="filters.footprint"
+                    <RepositoryModelSelector v-if="props.type != 'details'" :filter="filters.footprint" root="footprints" leaf-type="footprint"
                     title="footprint no. 1" :ref="(el) => { if (el) dialogs.footprint1 = el }"
                     @model-select="(e) => {model.footprintReferenceNo1 = e.name; model.footprintPathNo1 = e.path.join('/')}">
                     </RepositoryModelSelector>
@@ -127,7 +127,7 @@
                     </onyks-container>
                     <onyks-button v-if="props.type != 'details' && footprint1Filled && symbolFilled" background="yellow" @click="dialogs?.footprint2.open()">Select Footprint 2</onyks-button>
 
-                    <RepositoryModelSelector v-if="props.type != 'details' && footprint1Filled && symbolFilled" :filter="filters.footprint"
+                    <RepositoryModelSelector v-if="props.type != 'details' && footprint1Filled && symbolFilled" :filter="filters.footprint" root="footprints" leaf-type="footprint"
                     title="footprint no. 2" :ref="(el) => { if (el) dialogs.footprint2 = el }"
                     @model-select="(e) => {model.footprintReferenceNo2 = e.name; model.footprintPathNo2 = e.path.join('/')}">
                     </RepositoryModelSelector>
@@ -139,7 +139,7 @@
                     </onyks-container>
                     <onyks-button v-if="props.type != 'details' && footprint1Filled && symbolFilled && footprint2Filled" background="yellow" @click="dialogs?.footprint3.open()">Select Footprint 3</onyks-button>
 
-                    <RepositoryModelSelector v-if="props.type != 'details' && footprint1Filled && symbolFilled && footprint2Filled" :filter="filters.footprint"
+                    <RepositoryModelSelector v-if="props.type != 'details' && footprint1Filled && symbolFilled && footprint2Filled" :filter="filters.footprint" root="footprints" leaf-type="footprint"
                     title="footprint no. 3" :ref="(el) => { if (el) dialogs.footprint3 = el }"
                     @model-select="(e) => {model.footprintReferenceNo3 = e.name; model.footprintPathNo3 = e.path.join('/')}">
                     </RepositoryModelSelector>

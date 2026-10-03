@@ -29,6 +29,11 @@
             {
                 e.data.createdAt = dateUTCtoDestination(e.data.createdAt)
                 Object.assign(model.value, e.data);
+                // Editing keeps the current datasheet unless the user picks otherwise.
+                if(props.type == 'edit')
+                {
+                    model.value.isDatasheetSupposedToChange = 0
+                }
             }
         })
     }
@@ -77,6 +82,12 @@
                 // console.log(model.value)
                 dialogs.value.edit.open = true
                 const updateData = structuredClone(toRaw(model.value))
+                // Without a current datasheet there is nothing to keep or remove: the
+                // upload alone decides whether one is added.
+                if(!model.value.datasheet)
+                {
+                    updateData.isDatasheetSupposedToChange = file.value == null ? 0 : 2
+                }
                 data = await element.edit(model.value.uuid, updateData, file.value)
                 if(data.status == 200)
                 {
@@ -158,7 +169,7 @@
         </onyks-dialog>
 
         <onyks-dialog modal no-title :ref="(el) => { dialogs.edit = el }">
-            <onyks-text>Editing the element...</onyks-text>
+            <onyks-text>Saving the element...</onyks-text>
         </onyks-dialog>
 
         <onyks-dialog modal no-title :ref="(el) => { dialogs.duplicate = el }">
@@ -186,7 +197,7 @@
         </BasicButtonsPanel>
 
         <onyks-container align="end" padding="" gap="l" v-else-if="props.type == 'edit'">
-            <onyks-button background="blue" @click="() => {action('edit')}">Edit</onyks-button>
+            <onyks-button background="blue" @click="() => {action('edit')}">Save</onyks-button>
         </onyks-container>
 
         <onyks-container align="end" padding="" gap="l" v-else-if="props.type == 'duplicate'">

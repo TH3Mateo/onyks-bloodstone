@@ -19,7 +19,8 @@ from sqlalchemy import select, func, or_
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi import Response
-from pydantic import Json
+from pydantic import Json, ValidationError
+from fastapi.responses import JSONResponse
 import json
 import asyncio
 from datetime import datetime
@@ -29,6 +30,18 @@ app = FastAPI()
 UPLOAD_DIR = "/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="datasheet")
+
+# Element endpoints receive the element as a JSON string in a form field and validate it
+# with model_validate_json, so a rejected element raises a plain pydantic ValidationError.
+# Without this handler it surfaced as a bare 500 and the GUI had no message to show.
+@app.exception_handler(ValidationError)
+async def validationErrorHandler(request, exc: ValidationError):
+    messages = []
+    for error in exc.errors():
+        message = error["msg"].removeprefix("Value error, ")
+        field = ".".join(str(part) for part in error["loc"])
+        messages.append(f"{field}: {message}" if field else message)
+    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": " ".join(messages)})
 
 async def get_db():
     async with AsyncSessionLocal() as session:
@@ -516,7 +529,7 @@ async def manufacturerList(limit: int = Query(default=10, ge=1, le=100), skip: i
     result = await db.execute(query)
     totalCount = result.scalar()
     
-    queryEntries = select(models.Manufacturer).order_by(models.Manufacturer.id).offset(skip).limit(limit)
+    queryEntries = select(models.Manufacturer).order_by(func.lower(models.Manufacturer.name), models.Manufacturer.id).offset(skip).limit(limit)
     entriesResult = await db.execute(queryEntries)
     entries = entriesResult.scalars().all()
     
@@ -574,7 +587,7 @@ async def supplierList(limit: int = Query(default=10, ge=1, le=100), skip: int =
     result = await db.execute(query)
     totalCount = result.scalar()
     
-    queryEntries = select(models.Supplier).offset(skip).limit(limit)
+    queryEntries = select(models.Supplier).order_by(func.lower(models.Supplier.name), models.Supplier.id).offset(skip).limit(limit)
     entriesResult = await db.execute(queryEntries)
     entries = entriesResult.scalars().all()
 

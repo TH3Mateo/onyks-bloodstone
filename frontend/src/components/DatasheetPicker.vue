@@ -50,7 +50,7 @@
         </onyks-container>
     </template>
 
-    <onyks-file-upload ref="uploader" accept=".pdf" message="Drag a file or click to add it" @change="file = uploader.files[0]" :disabled="mode != 2 && props.type != 'add'"></onyks-file-upload>
+    <onyks-file-upload ref="uploader" accept=".pdf" message="Drag a file or click to add it" @change="file = uploader.files[0]" :disabled="mode != 2 && props.type != 'add' && !(props.type == 'edit' && !props.datasheet)"></onyks-file-upload>
     <onyks-container type="group">
         <onyks-button @click="uploader.reset">Reset</onyks-button>
     </onyks-container>
