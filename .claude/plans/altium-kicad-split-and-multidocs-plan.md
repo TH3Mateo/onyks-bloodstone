@@ -393,3 +393,21 @@ dashboard: 54 symbole / 52 footprinty w 41+41 plikach, rev 4.
   (test node: 20 → 0, 10 nowych).
 - SVN r5: `svn:global-ignores` += `*.[Dd][Bb][Ll][Ii][Bb]`. Test `svn add --force .` (jak Push w Chalcedonie):
   4 warianty DbLib pominięte, plik kontrolny dodany.
+
+---
+
+## 2026-10-03 — poprawki formularza elementu
+
+- **Ścieżki bibliotek:** eksplorator (`RepositoryExplorer`, prop `root`) startuje w `symbols/` lub `footprints/`
+  i nie da się wyjść wyżej — zapisana ścieżka to wprost ścieżka eksploratora. Przyczyna `part_library/...`
+  w bazie: poprawka `slice(1)` z commita „table fixes” nigdy nie trafiła do obrazu frontendu (nie był przebudowany).
+  Jedyny błędny wiersz (`d78ef747…`, XC7K325TFFG676) poprawiony UPDATE-em.
+- **Wybór kompletny:** `RepositoryModelSelector` (prop `leaf-type`) przyjmuje tylko symbol/footprint wewnątrz
+  pliku biblioteki; folder, sam plik lub brak zaznaczenia → komunikat, okno zostaje otwarte.
+- **Backend:** `ElementBase.checkLibraryPaths` — ref i ścieżka tylko w parze, ścieżka `symbols/…​.SchLib` /
+  `footprints/…​.PcbLib`. Handler `pydantic.ValidationError` → 400 z czytelnym `detail` (wcześniej goły 500).
+- **Edycja:** domyślnie „Don't change the datasheet” (tryb 0), przycisk „Save”. Element bez datasheetu: upload
+  aktywny, tryb wyliczany z tego, czy wybrano plik.
+- **Producenci/dostawcy:** `/manufacturer/list` i `/supplier/list` sortowane `lower(name)`.
+- **Zależność:** SQLAlchemy 2.1 nie instaluje już `greenlet` → `sqlalchemy[asyncio]` w `requirements.txt`
+  (bez tego backend nie startował po przebudowie obrazu).

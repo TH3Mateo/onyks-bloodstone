@@ -3,47 +3,60 @@
     import { ref } from 'vue';
     import { repository } from '@/utils/api';
     import { defineExpose } from 'vue';
-    
+
     const path = ref(null)
     const explorer = ref(null)
     const props = defineProps(
     {
-        filter: 
+        filter:
         {
             type: Function,
             required: false,
-            default: () => (e) => 
+            default: () => (e) =>
             {
                 return true
             }
+        },
+        // Top-level folder of the repository the explorer starts in and cannot leave
+        // (e.g. 'symbols'). The path shown is relative to the repository root, so it
+        // can be stored as-is.
+        root:
+        {
+            type: String,
+            required: true
         }
     })
-    
-    const pathChange = async (e) =>
+
+    const load = async () =>
     {
-        let temp = Array.from((await repository.list(path.value.content.slice(1).join('/'))).data)
+        let temp = Array.from((await repository.list(path.value.content.join('/'))).data)
         temp = temp.filter(e => props.filter(e))
         explorer.value.content = temp
+    }
+
+    const pathChange = async (e) =>
+    {
+        if (path.value.content.length == 0)
+        {
+            path.value.content = [props.root]
+        }
+        await load()
     }
 
     const enterFolder = async (e) =>
     {
         path.value.content = [...path.value.content, e.detail.folder.name]
-        let temp = Array.from((await repository.list(path.value.content.slice(1).join('/'))).data)
-        temp = temp.filter(e => props.filter(e))
-        explorer.value.content = temp
+        await load()
     }
 
     const refresh = async () =>
     {
-        let temp = Array.from((await repository.list(path.value.content.slice(1).join('/'))).data)
-        temp = temp.filter(e => props.filter(e))
-        explorer.value.content = temp
+        await load()
     }
 
-    const getSelected = (parametr) => 
+    const getSelected = (parametr) =>
     {
-        return {path: path.value.content, name: explorer.value.getSelectedItems()[0].name} 
+        return {path: [...path.value.content], item: explorer.value.getSelectedItems()[0] ?? null}
     };
 
     defineExpose(
@@ -51,19 +64,17 @@
         getSelected
     });
 
-    onMounted(async () => 
+    onMounted(async () =>
     {
-        explorer.value.types = [{type: 'file', icon: 'F390', isLikeDir: false}, 
-        {type: 'dir', icon: 'F3D8', isLikeDir: true}, 
+        explorer.value.types = [{type: 'file', icon: 'F390', isLikeDir: false},
+        {type: 'dir', icon: 'F3D8', isLikeDir: true},
         {type: 'schlib', icon: 'F3D5', isLikeDir: true},
         {type: 'pcblib', icon: 'F3D5', isLikeDir: true},
-        {type: 'footprint', icon: 'F6E7', isLikeDir: false}, 
+        {type: 'footprint', icon: 'F6E7', isLikeDir: false},
         {type: 'symbol', icon: 'F6E2', isLikeDir: false}]
-        
-        path.value.content = [(await repository.name()).data]
-        let temp = Array.from((await repository.list('/')).data)
-        temp = temp.filter(e => props.filter(e))
-        explorer.value.content = temp
+
+        path.value.content = [props.root]
+        await load()
     })
 </script>
 
