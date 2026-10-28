@@ -1,0 +1,12 @@
+#!/bin/sh
+# KiCad -> Altium: if the author is a KiCad user (tool = 'kicad'), their .kicad_sym/.kicad_mod
+# files are converted to .SchLib/.PcbLib and committed as the next revision by kicad2altium-bot.
+# Runs in the background so the client does not wait for the conversion; flock keeps runs in order.
+# The list of KiCad users is synced from the database into /etc/svn-kicad-users by entrypoint.sh.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1
+
+nohup flock /tmp/kicad2altium.lock \
+    python3 /opt/kicad2altium/svn_hook.py "$1" "$2" --users-file /etc/svn-kicad-users \
+    >> /var/log/kicad2altium.log 2>&1 < /dev/null &
+exit 0

@@ -71,6 +71,11 @@ SVN_PORT=8111
 
 # Destination path for datasheet PDFs
 DATASHEET_UPLOAD_PATH=./path/to/datasheets
+
+# Chalcedon installers offered for download in Settings, one folder per version, e.g.
+# ./path/to/chalcedon/1.2.0/Chalcedon-Setup-1.2.0.exe and .../1.2.0/Chalcedon-1.2.0.AppImage
+# (.exe/.msi = Windows; .AppImage/.deb/.rpm/.tar.gz = Linux; .zip by "win"/"linux" in the name)
+CHALCEDON_RELEASES_PATH=./path/to/chalcedon
 ```
 
 #### 3. Run the containers

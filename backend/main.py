@@ -20,8 +20,9 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi import Response
 from pydantic import Json, ValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 import json
+import re
 import asyncio
 from datetime import datetime
 
@@ -866,3 +867,64 @@ async def settingsKicadDbl(db = Depends(get_db)):
         media_type="application/json",
         headers={"Content-Disposition": 'attachment; filename="onyks_bloodstone.kicad_dbl"'}
     )
+# Chalcedon installers are dropped by hand into CHALCEDON_DIR, one folder per version:
+#   /chalcedon/1.2.0/Chalcedon-Setup-1.2.0.exe
+#   /chalcedon/1.2.0/Chalcedon-1.2.0.AppImage
+# The platform comes from the file extension; anything unrecognised is not offered.
+CHALCEDON_DIR = "/chalcedon"
+CHALCEDON_PLATFORMS = {
+    ".exe": "windows", ".msi": "windows",
+    ".appimage": "linux", ".deb": "linux", ".rpm": "linux", ".tar.gz": "linux",
+}
+
+def _chalcedonPlatform(file_name):
+    lower = file_name.lower()
+    for extension, platform in CHALCEDON_PLATFORMS.items():
+        if lower.endswith(extension):
+            return platform
+    if lower.endswith(".zip"):
+        if "win" in lower:
+            return "windows"
+        if "linux" in lower:
+            return "linux"
+    return None
+
+def _versionKey(version):
+    # "1.10.0" after "1.9.2": compare digit runs as numbers
+    return [(0, int(part), "") if part.isdigit() else (1, 0, part)
+            for part in re.findall(r"\d+|[^\d.\-_]+", version)]
+
+@app.get('/chalcedon/releases')
+async def chalcedonReleases():
+    if not os.path.isdir(CHALCEDON_DIR):
+        return []
+    releases = []
+    for version in os.listdir(CHALCEDON_DIR):
+        version_dir = os.path.join(CHALCEDON_DIR, version)
+        if not os.path.isdir(version_dir):
+            continue
+        files = []
+        for file_name in sorted(os.listdir(version_dir)):
+            file_path = os.path.join(version_dir, file_name)
+            platform = _chalcedonPlatform(file_name)
+            if platform and os.path.isfile(file_path):
+                files.append({"name": file_name, "platform": platform, "size": os.path.getsize(file_path)})
+        if files:
+            releases.append({
+                "version": version,
+                "date": datetime.fromtimestamp(os.path.getmtime(version_dir)).isoformat(),
+                "files": files,
+            })
+    releases.sort(key=lambda release: _versionKey(release["version"]), reverse=True)
+    return releases
+
+@app.get('/chalcedon/download/{version}/{file_name}')
+async def chalcedonDownload(version: str, file_name: str):
+    # Both parts must be plain names, so nothing outside CHALCEDON_DIR can be reached.
+    for part in (version, file_name):
+        if part in ("", ".", "..") or os.path.basename(part) != part or "\\" in part:
+            raise HTTPException(status_code=404, detail="Not found")
+    file_path = os.path.join(CHALCEDON_DIR, version, file_name)
+    if not _chalcedonPlatform(file_name) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(file_path, filename=file_name, media_type="application/octet-stream")

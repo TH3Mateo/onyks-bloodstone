@@ -539,6 +539,26 @@ export const settings =
     }
 }
 
+export const chalcedon =
+{
+    releases: async () =>
+    {
+        try
+        {
+            const response = await api.get(`/chalcedon/releases`);
+            return response
+        }
+        catch (error)
+        {
+            return error
+        }
+    },
+    download: (version, fileName) =>
+    {
+        window.open(`/api/chalcedon/download/${encodeURIComponent(version)}/${encodeURIComponent(fileName)}`, '_blank');
+    }
+}
+
 export const other =
 {
     updateViews: async () =>

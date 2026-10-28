@@ -1,6 +1,6 @@
 <script setup>
     import { ref, onMounted } from 'vue';
-    import { settings } from '@/utils/api.js';
+    import { settings, chalcedon } from '@/utils/api.js';
 
     const identity = ref({
         svnRepository: '',
@@ -11,6 +11,18 @@
         kicadDatabase: ''
     })
 
+    // Newest first, as returned by the server
+    const releases = ref([])
+    const releasesLoaded = ref(false)
+
+    const PLATFORM_LABELS = { windows: 'Windows', linux: 'Linux' }
+
+    const fileLabel = (file) =>
+    {
+        const extension = file.name.toLowerCase().endsWith('.tar.gz') ? 'tar.gz' : file.name.split('.').pop()
+        return `${PLATFORM_LABELS[file.platform]} (.${extension}, ${(file.size / 1048576).toFixed(1)} MB)`
+    }
+
     onMounted(async () =>
     {
         const res = await settings.identity()
@@ -18,6 +30,12 @@
         {
             identity.value = res.data
         }
+        const chalcedonRes = await chalcedon.releases()
+        if (chalcedonRes.status == 200)
+        {
+            releases.value = chalcedonRes.data
+        }
+        releasesLoaded.value = true
     })
 </script>
 
@@ -82,6 +100,28 @@
                         Type = Altium, using the file name (without extension) as the library nickname — this
                         must match the "Symbols"/"Footprints" columns generated in the database views.
                     </onyks-text>
+                </onyks-container>
+            </onyks-card>
+
+            <onyks-card title="Download Chalcedon" size="l">
+                <onyks-container gap="m" padding="">
+                    <onyks-text size="s">
+                        Chalcedon is the desktop client for this library. Pick the installer for your system;
+                        the newest version is listed first.
+                    </onyks-text>
+
+                    <onyks-text v-if="releasesLoaded && releases.length == 0" size="s">No installers are available yet.</onyks-text>
+
+                    <onyks-container v-for="(release, index) in releases" :key="release.version" gap="s" padding="">
+                        <onyks-header level="6">
+                            Version {{ release.version }}{{ index == 0 ? ' (latest)' : '' }}
+                        </onyks-header>
+                        <onyks-button v-for="file in release.files" :key="file.name"
+                            :background="file.platform == 'windows' ? 'blue' : 'green'"
+                            @click="chalcedon.download(release.version, file.name)">
+                            {{ fileLabel(file) }}
+                        </onyks-button>
+                    </onyks-container>
                 </onyks-container>
             </onyks-card>
 

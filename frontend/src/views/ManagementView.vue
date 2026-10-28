@@ -56,18 +56,8 @@
                 "label": "Select",
             },
             {
-                "key": "uuid",
-                "label": "UUID",
-                "hidden": false
-            },
-            {
                 "key": "partName",
                 "label": "Part Name",
-                "hidden": false
-            },
-            {
-                "key": "manufacturer",
-                "label": "Manufacturer",
                 "hidden": false
             },
             {
@@ -81,6 +71,31 @@
                 "hidden": false
             },
             {
+                "key": "libraryReference",
+                "label": "Symbol Reference",
+                "hidden": false
+            },
+            {
+                "key": "footprintReferenceNo1",
+                "label": "Footprint Reference No. 1",
+                "hidden": false
+            },
+            {
+                "key": "footprintReferenceNo2",
+                "label": "Footprint Reference No. 2",
+                "hidden": false
+            },
+            {
+                "key": "footprintReferenceNo3",
+                "label": "Footprint Reference No. 3",
+                "hidden": false
+            },
+            {
+                "key": "manufacturer",
+                "label": "Manufacturer",
+                "hidden": false
+            },
+            {
                 "key": "value",
                 "label": "Value",
                 "hidden": false
@@ -91,18 +106,8 @@
                 "hidden": false
             },
             {
-                "key": "libraryReference",
-                "label": "Symbol Reference",
-                "hidden": false
-            },
-            {
                 "key": "libraryPath",
                 "label": "Symbol Path",
-                "hidden": false
-            },
-            {
-                "key": "footprintReferenceNo1",
-                "label": "Footprint Reference No. 1",
                 "hidden": false
             },
             {
@@ -111,18 +116,8 @@
                 "hidden": false
             },
             {
-                "key": "footprintReferenceNo2",
-                "label": "Footprint Reference No. 2",
-                "hidden": false
-            },
-            {
                 "key": "footprintPathNo2",
                 "label": "Footprint Path No. 2",
-                "hidden": false
-            },
-            {
-                "key": "footprintReferenceNo3",
-                "label": "Footprint Reference No. 3",
                 "hidden": false
             },
             {

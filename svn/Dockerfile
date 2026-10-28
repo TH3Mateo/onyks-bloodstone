@@ -6,13 +6,15 @@ RUN apt-get update && \
         libapache2-mod-svn \
         libaprutil1-dbd-pgsql \
         gettext-base \
-        postgresql-client \ 
+        postgresql-client \
+        python3 \
     && rm -rf /var/lib/apt/lists/* && \
     cp /usr/lib/apache2/modules/mod_dav_svn.so /usr/local/apache2/modules/ && \
     cp /usr/lib/apache2/modules/mod_authz_svn.so /usr/local/apache2/modules/
 
 COPY httpd.conf.template /usr/local/apache2/conf/httpd.conf.template
 COPY svn-authz.template /etc/svn-authz.template
+COPY hooks/post-commit /usr/local/share/svn-hooks/post-commit
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

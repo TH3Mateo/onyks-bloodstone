@@ -29,6 +29,7 @@ services:
     volumes:
       - ${SVN_DATA_PATH}/${SVN_REPO_NAME}:/local_svn
       - ${DATASHEET_UPLOAD_PATH}:/uploads
+      - ${CHALCEDON_RELEASES_PATH:-./chalcedon}:/chalcedon:ro
 
 
   database:
@@ -54,5 +55,6 @@ services:
       - "${SVN_PORT}:443"
     volumes:
       - ${SVN_DATA_PATH}:/var/svn
+      - ./converter:/opt/kicad2altium:ro
     depends_on:
       - database

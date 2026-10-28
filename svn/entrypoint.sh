@@ -18,7 +18,26 @@ echo "Baza danych jest w pełni gotowa, tabela private.users znaleziona!"
 if [ ! -f "/var/svn/$SVN_REPO_NAME/format" ]; then
     mkdir -p "/var/svn/$SVN_REPO_NAME"
     svnadmin create "/var/svn/$SVN_REPO_NAME"
+
+    # Altium junk is never versioned: History folders (in any subfolder), previews,
+    # project logs and generated .DbLib files (any letter case). Done before the
+    # post-commit hook is installed, so this commit does not trigger a conversion.
+    svn propset svn:global-ignores \
+'__Previews
+History
+Project Logs for *
+*.[Dd][Bb][Ll][Ii][Bb]' \
+        --non-interactive -m "svn:global-ignores" "file:///var/svn/$SVN_REPO_NAME"
 fi
+
+# 2b. KiCad -> Altium conversion hook (converter is mounted at /opt/kicad2altium)
+# Installed on every start, so an image update also updates the hook in an existing repository.
+install -m 755 /usr/local/share/svn-hooks/post-commit "/var/svn/$SVN_REPO_NAME/hooks/post-commit"
+touch /var/log/kicad2altium.log /etc/svn-kicad-users
+chown www-data:www-data /var/log/kicad2altium.log
+chmod 644 /etc/svn-kicad-users
+# Hook runs go to `docker logs`
+tail -F -n 0 /var/log/kicad2altium.log &
 
 chown -R www-data:www-data /var/svn
 
@@ -73,6 +92,16 @@ sync_authz_file() {
                chown www-data:www-data /etc/svn-authz
                chmod 640 /etc/svn-authz
                echo "$(date) - Zaktualizowano uprawnienia SVN z bazy."
+           fi
+        fi
+
+        # KiCad users -- the post-commit hook converts their libraries to Altium
+        if psql "host=database dbname=$POSTGRES_DB user=$POSTGRES_USER" -Atc \
+           "SELECT login FROM private.users WHERE tool = 'kicad';" > /tmp/svn-kicad-users.tmp 2>/dev/null; then
+           if ! cmp -s /tmp/svn-kicad-users.tmp /etc/svn-kicad-users; then
+               cp /tmp/svn-kicad-users.tmp /etc/svn-kicad-users
+               chmod 644 /etc/svn-kicad-users
+               echo "$(date) - Zaktualizowano liste uzytkownikow KiCad."
            fi
         fi
         
