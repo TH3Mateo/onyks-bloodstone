@@ -15,6 +15,7 @@ RUN apt-get update && \
 COPY httpd.conf.template /usr/local/apache2/conf/httpd.conf.template
 COPY svn-authz.template /etc/svn-authz.template
 COPY hooks/post-commit /usr/local/share/svn-hooks/post-commit
+COPY hooks/pre-commit /usr/local/share/svn-hooks/pre-commit
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

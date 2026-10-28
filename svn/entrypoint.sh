@@ -18,21 +18,25 @@ echo "Baza danych jest w pełni gotowa, tabela private.users znaleziona!"
 if [ ! -f "/var/svn/$SVN_REPO_NAME/format" ]; then
     mkdir -p "/var/svn/$SVN_REPO_NAME"
     svnadmin create "/var/svn/$SVN_REPO_NAME"
+fi
 
-    # Altium junk is never versioned: History folders (in any subfolder), previews,
-    # project logs and generated .DbLib files (any letter case). Done before the
-    # post-commit hook is installed, so this commit does not trigger a conversion.
-    svn propset svn:global-ignores \
-'__Previews
+# 2a. Altium junk is never versioned: History and __Previews folders (in any subfolder),
+# project logs and .DbLib files (any letter case). Checked on every start, so a repository
+# created before this rule also gets it. Set as root before the chown below. Files without an
+# extension are rejected by the pre-commit hook only (a glob for them would ignore folders too).
+IGNORES='__Previews
 History
 Project Logs for *
-*.[Dd][Bb][Ll][Ii][Bb]' \
-        --non-interactive -m "svn:global-ignores" "file:///var/svn/$SVN_REPO_NAME"
+*.[Dd][Bb][Ll][Ii][Bb]'
+if [ "$(svnlook propget "/var/svn/$SVN_REPO_NAME" svn:global-ignores / 2>/dev/null)" != "$IGNORES" ]; then
+    svnmucc propset svn:global-ignores "$IGNORES" "file:///var/svn/$SVN_REPO_NAME" \
+        --non-interactive -m "svn:global-ignores"
 fi
 
 # 2b. KiCad -> Altium conversion hook (converter is mounted at /opt/kicad2altium)
 # Installed on every start, so an image update also updates the hook in an existing repository.
 install -m 755 /usr/local/share/svn-hooks/post-commit "/var/svn/$SVN_REPO_NAME/hooks/post-commit"
+install -m 755 /usr/local/share/svn-hooks/pre-commit "/var/svn/$SVN_REPO_NAME/hooks/pre-commit"
 touch /var/log/kicad2altium.log /etc/svn-kicad-users
 chown www-data:www-data /var/log/kicad2altium.log
 chmod 644 /etc/svn-kicad-users
