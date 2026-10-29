@@ -63,6 +63,10 @@ async def startup_db():
                 "ALTER TABLE private.elements "
                 "ADD COLUMN IF NOT EXISTS docs_count INTEGER NOT NULL DEFAULT 0"
             ))
+            # E-mail used to be UNIQUE; one person may now have several accounts.
+            await conn.execute(text(
+                "ALTER TABLE private.users DROP CONSTRAINT IF EXISTS users_email_key"
+            ))
             # Superseded by elements.docs_count + the <uuid>_N.pdf naming convention.
             await conn.execute(text("DROP TABLE IF EXISTS private.element_documents"))
 

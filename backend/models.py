@@ -28,7 +28,8 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     login = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
+    # Not unique: one person may hold two accounts (e.g. one for Altium, one for KiCad).
+    email = Column(String, nullable=False)
     expirationTime = Column(
         'expiration_time',
         DateTime(timezone=True),
