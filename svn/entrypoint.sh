@@ -21,13 +21,14 @@ if [ ! -f "/var/svn/$SVN_REPO_NAME/format" ]; then
 fi
 
 # 2a. Altium junk is never versioned: History and __Previews folders (in any subfolder),
-# project logs and .DbLib files (any letter case). Checked on every start, so a repository
+# project logs, .DbLib and .kicad_dbl files (any letter case). Checked on every start, so a repository
 # created before this rule also gets it. Set as root before the chown below. Files without an
 # extension are rejected by the pre-commit hook only (a glob for them would ignore folders too).
 IGNORES='__Previews
 History
 Project Logs for *
-*.[Dd][Bb][Ll][Ii][Bb]'
+*.[Dd][Bb][Ll][Ii][Bb]
+*.[Kk][Ii][Cc][Aa][Dd]_[Dd][Bb][Ll]'
 if [ "$(svnlook propget "/var/svn/$SVN_REPO_NAME" svn:global-ignores / 2>/dev/null)" != "$IGNORES" ]; then
     svnmucc propset svn:global-ignores "$IGNORES" "file:///var/svn/$SVN_REPO_NAME" \
         --non-interactive -m "svn:global-ignores"

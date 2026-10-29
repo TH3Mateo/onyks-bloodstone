@@ -1,6 +1,6 @@
 #!/bin/sh
 # Rejects adding Altium junk: History and __Previews folders (in any subfolder), project logs,
-# .DbLib files (any letter case) and files without an extension. Same list as svn:global-ignores
+# .DbLib and .kicad_dbl files (any letter case) and files without an extension. Same list as svn:global-ignores
 # set in entrypoint.sh -- that property is only a hint for clients, this hook enforces it.
 # Files without an extension are only checked here: a glob for them would also ignore folders.
 # Deleting or modifying already versioned junk is allowed, so cleaning it up is not blocked.
@@ -12,10 +12,10 @@ TXN="$2"
 
 # svnlook changed: status in columns 1-4, path from column 5, folders end with '/'
 JUNK=$(svnlook changed -t "$TXN" "$REPOS" | grep '^A' | cut -c5- | \
-    grep -iE '(^|/)(History|__Previews|Project Logs for [^/]*)(/|$)|\.dblib$|(^|/)[^./]+$')
+    grep -iE '(^|/)(History|__Previews|Project Logs for [^/]*)(/|$)|\.dblib$|\.kicad_dbl$|(^|/)[^./]+$')
 
 if [ -n "$JUNK" ]; then
-    echo "Commit odrzucony - tych plikow nie wersjonujemy (History, __Previews, .DbLib, pliki bez rozszerzenia):" >&2
+    echo "Commit odrzucony - tych plikow nie wersjonujemy (History, __Previews, .DbLib, .kicad_dbl, pliki bez rozszerzenia):" >&2
     echo "$JUNK" | sed 's/^/  /' >&2
     echo "Odznacz je w oknie commita albo cofnij dodanie: svn revert --depth infinity <sciezka>" >&2
     exit 1
