@@ -840,6 +840,21 @@ async def serverIdentity():
         "kicadDatabase": utils.LIBRARY_DATABASES[utils.KICAD_SCHEMA],
     }
 
+@app.post('/user/identify')
+async def userIdentify(credentials: schemas.UserCredentials, db = Depends(get_db)):
+    """Tells a client application (Chalcedon) which CAD tool the account uses, so it can
+    keep the right library file up to date. The same login and password as for SVN and
+    ODBC are required; every failure looks the same, so it does not reveal which logins exist."""
+    result = await db.execute(
+        text("SELECT tool, rank::text AS rank FROM private.users "
+             "WHERE login = :login AND private.user_check_password(login, :password)"),
+        {"login": credentials.login, "password": credentials.password}
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status_code=401, detail="Invalid login or password.")
+    return {"login": credentials.login, "tool": row.tool, "rank": row.rank}
+
 def _publicDatabaseHost():
     from urllib.parse import urlparse
     parsed = urlparse(os.getenv("PUBLIC_FILES_URL", "http://localhost/"))

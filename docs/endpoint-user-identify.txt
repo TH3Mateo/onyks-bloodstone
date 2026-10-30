@@ -1,0 +1,70 @@
+ENDPOINT: POST /user/identify   (z nginx: POST /api/user/identify)
+=====================================================================
+
+Po co
+-----
+Klient ONYKS Chalcedon (aplikacja desktopowa) musi wiedziec, jakiego narzedzia CAD uzywa
+zalogowany uzytkownik (private.users.tool = 'altium' | 'kicad'), zeby utrzymywac wlasciwy
+plik biblioteki:
+  - altium -> .DbLib
+  - kicad  -> .kicad_dbl (GET /settings/kicad-dbl)
+Chalcedon zna tylko login i haslo z ustawien (te same, ktore sluza do SVN i ODBC), wiec
+endpoint uwierzytelnia sie tymi danymi - nie ma tokenu ani sesji.
+
+Zadanie
+-------
+POST /user/identify
+Content-Type: application/json
+
+Body (schemas.UserCredentials):
+    {
+      "login":    "jan.kowalski",     // str, 1..63 znakow
+      "password": "tajne-haslo"       // str, 1..256 znakow
+    }
+
+Odpowiedz 200:
+    {
+      "login": "jan.kowalski",
+      "tool":  "kicad",               // 'altium' | 'kicad'  (private.users.tool)
+      "rank":  "user"                 // private.users.rank rzutowane na tekst
+    }
+
+Bledy:
+    401  {"detail": "Invalid login or password."}
+         - zawsze ten sam komunikat i kod, gdy login nie istnieje ALBO haslo jest zle
+           (nie ujawniamy, ktore loginy istnieja)
+    422  walidacja Pydantic (puste pole, za dlugi login/haslo)
+
+Implementacja (backend/schemas.py)
+----------------------------------
+    class UserCredentials(BaseModel):
+        login: str = Field(min_length=1, max_length=63)
+        password: str = Field(min_length=1, max_length=256)
+
+Implementacja (backend/main.py, obok /server/identity)
+------------------------------------------------------
+    @app.post('/user/identify')
+    async def userIdentify(credentials: schemas.UserCredentials, db = Depends(get_db)):
+        result = await db.execute(
+            text("SELECT tool, rank::text AS rank FROM private.users "
+                 "WHERE login = :login AND private.user_check_password(login, :password)"),
+            {"login": credentials.login, "password": credentials.password}
+        )
+        row = result.first()
+        if row is None:
+            raise HTTPException(status_code=401, detail="Invalid login or password.")
+        return {"login": credentials.login, "tool": row.tool, "rank": row.rank}
+
+Uwagi
+-----
+- Haslo sprawdza istniejaca funkcja private.user_check_password(login, password) (bcrypt).
+- Endpoint nie zapisuje nic w bazie ani nie loguje hasla (zadnych logow z body zadania).
+- Warto objac go tym samym rate-limitem / fail2banem co inne punkty logowania, bo da sie nim
+  zgadywac hasla (odpowiedz 401 vs 200).
+- Wymagana jest publiczna dostepnosc przez nginx pod /api/user/identify (bez uwierzytelniania
+  naglowkiem - dane sa w body).
+- Starszy serwer bez tego endpointu odpowiada 404/405; Chalcedon wtedy zaklada 'altium'.
+- Test reczny:
+    curl -s -X POST http://HOST/api/user/identify \
+         -H 'Content-Type: application/json' \
+         -d '{"login":"jan.kowalski","password":"tajne-haslo"}'

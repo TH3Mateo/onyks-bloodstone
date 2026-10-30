@@ -67,6 +67,11 @@ class ElementList(BaseModel):
     total: int
     items: List[ElementFull]
 
+class UserCredentials(BaseModel):
+    login: str = Field(min_length=1, max_length=63)
+    password: str = Field(min_length=1, max_length=256)
+
+
 class ManufacturerBase(BaseModel):
     name: DictionaryName
 
