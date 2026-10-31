@@ -11,7 +11,7 @@
         kicadDatabase: ''
     })
 
-    // Newest first, as returned by the server
+    // Only the newest version is offered (the server returns all of them, newest first)
     const releases = ref([])
     const releasesLoaded = ref(false)
 
@@ -19,7 +19,8 @@
 
     const fileLabel = (file) =>
     {
-        const extension = file.name.toLowerCase().endsWith('.tar.gz') ? 'tar.gz' : file.name.split('.').pop()
+        const lower = file.name.toLowerCase()
+        const extension = ['pkg.tar.zst', 'tar.gz'].find(multi => lower.endsWith('.' + multi)) ?? file.name.split('.').pop()
         return `${PLATFORM_LABELS[file.platform]} (.${extension}, ${(file.size / 1048576).toFixed(1)} MB)`
     }
 
@@ -33,7 +34,7 @@
         const chalcedonRes = await chalcedon.releases()
         if (chalcedonRes.status == 200)
         {
-            releases.value = chalcedonRes.data
+            releases.value = chalcedonRes.data.slice(0, 1)
         }
         releasesLoaded.value = true
     })
@@ -106,15 +107,14 @@
             <onyks-card title="Download Chalcedon" size="l">
                 <onyks-container gap="m" padding="">
                     <onyks-text size="s">
-                        Chalcedon is the desktop client for this library. Pick the installer for your system;
-                        the newest version is listed first.
+                        Chalcedon is the desktop client for this library. Pick the installer for your system.
                     </onyks-text>
 
                     <onyks-text v-if="releasesLoaded && releases.length == 0" size="s">No installers are available yet.</onyks-text>
 
-                    <onyks-container v-for="(release, index) in releases" :key="release.version" gap="s" padding="">
+                    <onyks-container v-for="release in releases" :key="release.version" gap="s" padding="">
                         <onyks-header level="6">
-                            Version {{ release.version }}{{ index == 0 ? ' (latest)' : '' }}
+                            Version {{ release.version }}
                         </onyks-header>
                         <onyks-button v-for="file in release.files" :key="file.name"
                             :background="file.platform == 'windows' ? 'blue' : 'green'"

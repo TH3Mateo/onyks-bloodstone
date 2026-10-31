@@ -894,6 +894,7 @@ CHALCEDON_DIR = "/chalcedon"
 CHALCEDON_PLATFORMS = {
     ".exe": "windows", ".msi": "windows",
     ".appimage": "linux", ".deb": "linux", ".rpm": "linux", ".tar.gz": "linux",
+    ".pkg.tar.zst": "linux",
 }
 
 def _chalcedonPlatform(file_name):
