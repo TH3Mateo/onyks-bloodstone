@@ -6,7 +6,10 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1
 
-nohup flock /tmp/kicad2altium.lock \
-    python3 /opt/kicad2altium/svn_hook.py "$1" "$2" --users-file /etc/svn-kicad-users \
-    >> /var/log/kicad2altium.log 2>&1 < /dev/null &
+# Afterwards (and for every author) lib_tables.py rebuilds kicad_tables/sym-lib-table and fp-lib-table
+# whenever a revision added or removed a .SchLib/.PcbLib; the bot's conversion commit is such a revision.
+nohup flock /tmp/kicad2altium.lock sh -c '
+    python3 /opt/kicad2altium/svn_hook.py "$1" "$2" --users-file /etc/svn-kicad-users
+    python3 /opt/kicad2altium/lib_tables.py "$1" "$2"
+' sh "$1" "$2" >> /var/log/kicad2altium.log 2>&1 < /dev/null &
 exit 0

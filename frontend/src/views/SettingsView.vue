@@ -97,9 +97,10 @@
                     <onyks-button background="green" @click="settings.downloadKicadDbl">Download KiCad .kicad_dbl</onyks-button>
 
                     <onyks-text size="s">
-                        For KiCad: register each SchLib/PcbLib file in your Symbol/Footprint Library Table with
-                        Type = Altium, using the file name (without extension) as the library nickname — this
-                        must match the "Symbols"/"Footprints" columns generated in the database views.
+                        For KiCad: set the path variable ONYKS_LIBRARY (Preferences → Configure Paths) to your
+                        SVN working copy, then add the generated tables from its kicad_tables folder
+                        (sym-lib-table, fp-lib-table) as your Symbol/Footprint Library Tables. The server keeps
+                        them up to date; run "svn update" to get new components.
                     </onyks-text>
                 </onyks-container>
             </onyks-card>
