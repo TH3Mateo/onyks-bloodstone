@@ -1139,7 +1139,7 @@ def write_pcblib(fp_files, path):
     props = enable_mech_layers(props.replace("|FILENAME=", "|FILENAME=" + os.path.abspath(path), 1))
     props = re.sub(r'\|DATE=[^|]*', "|DATE=" + now.strftime("%d.%m.%Y"), props, count=1)
     props = re.sub(r'\|TIME=[^|]*', "|TIME=" + now.strftime("%H:%M:%S"), props, count=1)
-    pb = props.encode("latin1") + b"\0"
+    pb = props.encode("cp1252", errors="replace") + b"\0"
     data = struct.pack("<I", len(pb)) + pb + struct.pack("<I", len(comps))
     for n, _, _, _ in comps:
         nb = enc(n)[:255]
@@ -1210,6 +1210,9 @@ def expand(paths, ext):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")  # paths with characters the console cannot show
     ap = argparse.ArgumentParser(description="Konwerter bibliotek KiCad -> Altium (SchLib/PcbLib)")
     ap.add_argument("--sym", nargs="*", help="pliki .kicad_sym")
     ap.add_argument("--fp", nargs="*", help="pliki .kicad_mod lub katalogi .pretty")

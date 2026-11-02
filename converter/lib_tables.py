@@ -26,10 +26,11 @@ import tempfile
 BOT = "kicad-tables-bot"
 TABLES_DIR = "kicad_tables"
 VARIABLE = "ONYKS_LIBRARY"
-# (folder, rozszerzenie pliku, plik tablicy, naglowek tablicy)
+# (folder, rozszerzenie pliku, plik tablicy, naglowek tablicy, typ biblioteki). Typ to nazwa wtyczki
+# w KiCadzie i dla symboli jest inna niz dla footprintow (sch_io_mgr.cpp / pcb_io_mgr.cpp).
 TABLES = [
-    ("symbols", ".schlib", "sym-lib-table", "sym_lib_table"),
-    ("footprints", ".pcblib", "fp-lib-table", "fp_lib_table"),
+    ("symbols", ".schlib", "sym-lib-table", "sym_lib_table", "Altium"),
+    ("footprints", ".pcblib", "fp-lib-table", "fp_lib_table", "Altium Designer"),
 ]
 
 
@@ -50,7 +51,7 @@ def touches_libraries(repos, rev):
         status, path = line[:4], line[4:].lower()
         if status[0] not in "AD":
             continue
-        for folder, extension, _, _ in TABLES:
+        for folder, extension, _, _, _ in TABLES:
             if path.startswith(folder + "/") and path.endswith(extension):
                 return True
     return False
@@ -60,7 +61,7 @@ def quoted(text):
     return '"%s"' % text.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def build_table(tree, folder, extension, header):
+def build_table(tree, folder, extension, header, library_type):
     """Zwraca (tekst tablicy, lista pominietych sciezek). Pliki po sciezce, wiec wynik jest stabilny."""
     rows, seen, skipped = [], {}, []
     for path in sorted(p for p in tree if p.startswith(folder + "/") and p.lower().endswith(extension)):
@@ -69,8 +70,8 @@ def build_table(tree, folder, extension, header):
             skipped.append("%s (nickname jak %s)" % (path, seen[nickname]))
             continue
         seen[nickname] = path
-        rows.append("  (lib (name %s)(type \"Altium\")(uri %s)(options \"\")(descr \"\"))"
-                    % (quoted(nickname), quoted("${%s}/%s" % (VARIABLE, path))))
+        rows.append("  (lib (name %s)(type %s)(uri %s)(options \"\")(descr \"\"))"
+                    % (quoted(nickname), quoted(library_type), quoted("${%s}/%s" % (VARIABLE, path))))
     return "(%s\n  (version 7)\n%s\n)\n" % (header, "\n".join(rows)), skipped
 
 
@@ -83,8 +84,8 @@ def regenerate(repos, rev):
     tree = [line.strip() for line in run(["svnlook", "tree", "--full-paths", repos]).splitlines()]
     actions, summary = [], []
     with tempfile.TemporaryDirectory(prefix="lib-tables-") as tmp:
-        for folder, extension, filename, header in TABLES:
-            text, skipped = build_table(tree, folder, extension, header)
+        for folder, extension, filename, header, library_type in TABLES:
+            text, skipped = build_table(tree, folder, extension, header, library_type)
             for s in skipped:
                 log(rev, "POMINIETO, ten sam nickname: %s" % s)
             target = "%s/%s" % (TABLES_DIR, filename)
